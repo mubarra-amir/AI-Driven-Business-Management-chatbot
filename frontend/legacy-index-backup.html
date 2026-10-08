@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ERP Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #E4E8EB;
+    --surface: #FFFFFF;
+    --surface-sunk: #F3F5F7;
+    --ink: #17262F;
+    --muted: #63767F;
+    --line: #C9D3D9;
+    --line-soft: #E2E8EC;
+    --accent: #0B5F73;
+    --accent-ink: #FFFFFF;
+    --warn: #8A5200;
+    --warn-bg: #FBF0DC;
+    --danger: #96321F;
+    --good: #1C6549;
+    --rail: 206px;
+    --chat: 368px;
+    --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 400 14px/1.5 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* ---------- shell ---------- */
+  .shell { display: grid; grid-template-columns: var(--rail) minmax(0,1fr) var(--chat); height: 100%; }
+  .shell.chat-hidden { grid-template-columns: var(--rail) minmax(0,1fr) 0; }
+
+  /* ---------- rail ---------- */
+  .rail { background: var(--surface); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow-y: auto; }
+  .brand { padding: 20px 18px 16px; border-bottom: 1px solid var(--line-soft); }
+  .brand h1 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+  .brand p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  .nav { padding: 10px 0; flex: 1; }
+  .nav button {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    width: 100%; padding: 9px 18px; border: 0; background: none;
+    font: inherit; color: var(--muted); text-align: left; cursor: pointer;
+    border-left: 3px solid transparent;
+  }
+  .nav button:hover { background: var(--surface-sunk); color: var(--ink); }
+  .nav button[aria-current="page"] { color: var(--ink); font-weight: 500; border-left-color: var(--accent); background: var(--surface-sunk); }
+  .nav .tally { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .rail-foot { padding: 14px 18px; border-top: 1px solid var(--line-soft); font-size: 12px; color: var(--muted); }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); margin-right: 6px; vertical-align: 1px; }
+  .dot.up { background: var(--good); }
+  .dot.down { background: var(--danger); }
+
+  /* ---------- main ---------- */
+  .main { overflow-y: auto; padding: 22px 26px 60px; }
+  .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+  .head h2 { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: -0.015em; }
+  .head p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+  .head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  button.btn {
+    font: 500 13px/1 var(--sans); padding: 9px 14px; border-radius: 3px;
+    border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); cursor: pointer;
+  }
+  button.btn:hover { background: #0A5063; }
+  button.btn.ghost { background: var(--surface); color: var(--ink); border-color: var(--line); }
+  button.btn.ghost:hover { background: var(--surface-sunk); }
+  button.btn.quiet { background: none; border-color: transparent; color: var(--muted); padding: 5px 7px; }
+  button.btn.quiet:hover { color: var(--ink); background: var(--surface-sunk); }
+  button.btn.danger { color: var(--danger); }
+  button.btn:disabled { opacity: .5; cursor: not-allowed; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---------- panels + tables ---------- */
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+  .panel + .panel { margin-top: 18px; }
+  .panel-head { padding: 12px 16px; border-bottom: 1px solid var(--line-soft); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .panel-head h3 { margin: 0; font-size: 14px; font-weight: 600; }
+  .scroller { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-weight: 500; color: var(--muted); padding: 9px 16px; border-bottom: 1px solid var(--line); white-space: nowrap; font-size: 12px; }
+  td { padding: 10px 16px; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: var(--surface-sunk); }
+  td.wrap { white-space: normal; min-width: 180px; }
+  .right { text-align: right; }
+  .empty { padding: 40px 16px; text-align: center; color: var(--muted); }
+  .empty strong { display: block; color: var(--ink); font-weight: 500; margin-bottom: 4px; }
+
+  .tag { display: inline-block; padding: 2px 7px; border-radius: 2px; font-size: 12px; background: var(--surface-sunk); border: 1px solid var(--line-soft); }
+  .tag.low { background: var(--warn-bg); border-color: #EBD9B4; color: var(--warn); }
+  .tag.ok { color: var(--good); }
+  .tag.pending { color: var(--warn); }
+  .tag.cancelled { color: var(--danger); }
+
+  /* ---------- stat tiles ---------- */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; }
+  .tile .k { font-size: 12px; color: var(--muted); }
+  .tile .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 24px; margin-top: 6px; letter-spacing: -0.02em; }
+  .tile .s { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .tile.flag { border-color: #E4CFA4; background: var(--warn-bg); }
+  .tile.flag .v { color: var(--warn); }
+
+  .search { padding: 8px 11px; border: 1px solid var(--line); border-radius: 3px; font: inherit; background: var(--surface); min-width: 200px; }
+
+  /* ---------- chat ---------- */
+  .chat { background: var(--surface); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
+  .shell.chat-hidden .chat { display: none; }
+  .chat-head { padding: 14px 16px; border-bottom: 1px solid var(--line-soft); display: flex; justify-content: space-between; align-items: center; }
+  .chat-head h3 { margin: 0; font-size: 14px; font-weight: 600; }
+  .chat-head p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  .log { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .msg { max-width: 92%; font-size: 13px; line-height: 1.55; }
+  .msg.user { align-self: flex-end; background: var(--accent); color: var(--accent-ink); padding: 9px 12px; border-radius: 10px 10px 2px 10px; white-space: pre-wrap; }
+  .msg.bot { align-self: flex-start; white-space: pre-wrap; }
+  .msg.err { align-self: flex-start; color: var(--danger); }
+  .trace { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 5px; }
+  .attachments { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .attachment-chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px;
+    border: 1px solid var(--line); border-radius: 4px; background: var(--surface-sunk);
+    color: var(--accent); font-size: 13px; font-weight: 500; text-decoration: none;
+  }
+  .attachment-chip:hover { background: var(--line-soft); }
+  .msg.bot a.chat-link { color: var(--accent); text-decoration: underline; text-decoration-color: rgba(11,95,115,.35); }
+  .msg.bot a.chat-link:hover { text-decoration-color: var(--accent); }
+  .trace span { font-family: var(--mono); font-size: 11px; padding: 2px 6px; border-radius: 2px; background: var(--surface-sunk); border: 1px solid var(--line-soft); color: var(--muted); }
+  .trace span.bad { color: var(--danger); border-color: #E3C4BD; }
+  .hint { color: var(--muted); font-size: 13px; }
+  .hint ul { margin: 8px 0 0; padding-left: 18px; }
+  .hint li { margin-bottom: 5px; }
+  .chat-form { border-top: 1px solid var(--line-soft); padding: 12px; display: flex; gap: 8px; align-items: flex-end; }
+  .chat-form textarea {
+    flex: 1; resize: none; font: inherit; padding: 9px 11px; border: 1px solid var(--line);
+    border-radius: 3px; min-height: 40px; max-height: 140px; background: var(--surface); color: var(--ink);
+  }
+  .thinking { display: flex; gap: 4px; align-items: center; color: var(--muted); font-size: 13px; }
+  .thinking i { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); animation: pulse 1.2s infinite; }
+  .thinking i:nth-child(2) { animation-delay: .15s; }
+  .thinking i:nth-child(3) { animation-delay: .3s; }
+  @keyframes pulse { 0%, 60%, 100% { opacity: .25 } 30% { opacity: 1 } }
+  @media (prefers-reduced-motion: reduce) { .thinking i { animation: none; opacity: .5 } }
+
+  /* ---------- modal ---------- */
+  .scrim { position: fixed; inset: 0; background: rgba(23,38,47,.42); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 40; }
+  .modal { background: var(--surface); border-radius: 5px; width: min(560px, 100%); max-height: 86vh; display: flex; flex-direction: column; box-shadow: 0 18px 48px rgba(23,38,47,.28); }
+  .modal header { padding: 16px 20px; border-bottom: 1px solid var(--line-soft); }
+  .modal header h3 { margin: 0; font-size: 16px; font-weight: 600; }
+  .modal header p { margin: 3px 0 0; font-size: 13px; color: var(--muted); }
+  .modal .body { padding: 18px 20px; overflow-y: auto; }
+  .modal footer { padding: 14px 20px; border-top: 1px solid var(--line-soft); display: flex; justify-content: flex-end; gap: 8px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 13px; margin-bottom: 5px; }
+  .field .note { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .field input, .field select, .field textarea {
+    width: 100%; padding: 8px 11px; border: 1px solid var(--line); border-radius: 3px;
+    font: inherit; background: var(--surface); color: var(--ink);
+  }
+  .field input[type="number"] { font-family: var(--mono); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  .line-row { display: grid; grid-template-columns: 1fr 88px 32px; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .form-error { color: var(--danger); font-size: 13px; margin-bottom: 12px; }
+
+  .mobile-toggle { display: none; }
+  @media (max-width: 1080px) {
+    .shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .shell.chat-hidden { grid-template-columns: 1fr; }
+    .rail { flex-direction: row; align-items: center; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+    .brand { border-bottom: 0; padding: 12px 16px; flex-shrink: 0; }
+    .brand p, .rail-foot { display: none; }
+    .nav { display: flex; padding: 0; }
+    .nav button { border-left: 0; border-bottom: 3px solid transparent; white-space: nowrap; padding: 14px 12px; }
+    .nav button[aria-current="page"] { border-left-color: transparent; border-bottom-color: var(--accent); }
+    .nav .tally { display: none; }
+    .chat { position: fixed; inset: 0; z-index: 30; border-left: 0; }
+    .shell.chat-hidden .chat { display: none; }
+    .mobile-toggle { display: inline-flex; }
+    .main { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="shell chat-hidden" id="shell">
+
+  <aside class="rail">
+    <div class="brand">
+      <h1>ERP Console</h1>
+      <p>Inventory, orders and sales</p>
+    </div>
+    <nav class="nav" id="nav"></nav>
+    <div class="rail-foot">
+      <div><span class="dot" id="api-dot"></span><span id="api-status">Checking API</span></div>
+      <div style="margin-top:6px"><span class="dot" id="bot-dot"></span><span id="bot-status">Checking assistant</span></div>
+    </div>
+  </aside>
+
+  <main class="main" id="main"></main>
+
+  <section class="chat" id="chat">
+    <div class="chat-head">
+      <div>
+        <h3>Assistant</h3>
+        <p id="chat-sub">Ask it to look things up or make changes</p>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button class="btn quiet" id="chat-reset" title="Clear this conversation">Clear</button>
+        <button class="btn quiet mobile-toggle" id="chat-close">Close</button>
+      </div>
+    </div>
+    <div class="log" id="log"></div>
+    <form class="chat-form" id="chat-form">
+      <textarea id="chat-input" rows="1" placeholder="Restock 50 USB-C cables from Northwind" autocomplete="off"></textarea>
+      <button class="btn" type="submit" id="chat-send">Send</button>
+    </form>
+  </section>
+</div>
+
+<div id="modal-root"></div>
+
+<script>
+const API = "";                                       // same origin as this page
+const BOT = `http://${location.hostname}:5001`;       // Flask chatbot
+let sessionId = null;
+let view = "overview";
+let cache = { products: [], customers: [], vendors: [] };
+
+/* ------------------------------------------------------------------ utils */
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const money = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const int = (n) => Number(n || 0).toLocaleString();
+const date = (d) => d ? new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
+
+async function api(path, options = {}) {
+  const res = await fetch(API + path, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = { error: text }; }
+  if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`);
+  return data;
+}
+
+function table(columns, rows, renderRow, emptyTitle, emptyBody) {
+  if (!rows.length) {
+    return `<div class="empty"><strong>${esc(emptyTitle)}</strong>${esc(emptyBody)}</div>`;
+  }
+  return `<div class="scroller"><table><thead><tr>${
+    columns.map((c) => `<th class="${c.align === "right" ? "right" : ""}">${esc(c.label)}</th>`).join("")
+  }</tr></thead><tbody>${rows.map(renderRow).join("")}</tbody></table></div>`;
+}
+
+/* ------------------------------------------------------------------ modal */
+function modal({ title, subtitle, fields, submitLabel, onSubmit, extra }) {
+  const root = $("modal-root");
+  root.innerHTML = `
+    <div class="scrim" id="scrim">
+      <div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+        <header><h3>${esc(title)}</h3>${subtitle ? `<p>${esc(subtitle)}</p>` : ""}</header>
+        <div class="body">
+          <div class="form-error" id="form-error" style="display:none"></div>
+          <form id="modal-form">${fields}</form>
+          ${extra || ""}
+        </div>
+        <footer>
+          <button class="btn ghost" type="button" id="modal-cancel">Cancel</button>
+          <button class="btn" type="button" id="modal-submit">${esc(submitLabel)}</button>
+        </footer>
+      </div>
+    </div>`;
+
+  const close = () => { root.innerHTML = ""; document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  $("scrim").addEventListener("mousedown", (e) => { if (e.target.id === "scrim") close(); });
+  $("modal-cancel").addEventListener("click", close);
+
+  const submit = async () => {
+    const btn = $("modal-submit");
+    const data = Object.fromEntries(new FormData($("modal-form")).entries());
+    btn.disabled = true;
+    try {
+      await onSubmit(data, close);
+    } catch (err) {
+      const box = $("form-error");
+      if (box) { box.textContent = err.message; box.style.display = "block"; }
+      btn.disabled = false;
+    }
+  };
+  $("modal-submit").addEventListener("click", submit);
+  $("modal-form").addEventListener("submit", (e) => { e.preventDefault(); submit(); });
+  const first = root.querySelector("input, select, textarea");
+  if (first) first.focus();
+  return { close };
+}
+
+const field = (name, label, opts = {}) => `
+  <div class="field">
+    <label for="f-${name}">${esc(label)}</label>
+    <input id="f-${name}" name="${name}" type="${opts.type || "text"}"
+      ${opts.step ? `step="${opts.step}"` : ""} ${opts.min !== undefined ? `min="${opts.min}"` : ""}
+      value="${esc(opts.value ?? "")}" ${opts.required ? "required" : ""}
+      placeholder="${esc(opts.placeholder || "")}">
+    ${opts.note ? `<div class="note">${esc(opts.note)}</div>` : ""}
+  </div>`;
+
+const select = (name, label, options, opts = {}) => `
+  <div class="field">
+    <label for="f-${name}">${esc(label)}</label>
+    <select id="f-${name}" name="${name}">
+      ${opts.blank ? `<option value="">${esc(opts.blank)}</option>` : ""}
+      ${options.map((o) => `<option value="${esc(o.value)}" ${String(o.value) === String(opts.value) ? "selected" : ""}>${esc(o.label)}</option>`).join("")}
+    </select>
+    ${opts.note ? `<div class="note">${esc(opts.note)}</div>` : ""}
+  </div>`;
+
+/* ------------------------------------------------------- reference loading */
+async function loadRefs() {
+  const [products, customers, vendors] = await Promise.all([
+    api("/api/products"), api("/api/customers"), api("/api/vendors"),
+  ]);
+  cache = { products, customers, vendors };
+}
+
+const productOptions = () => cache.products.map((p) => ({ value: p.id, label: `${p.name} (${p.sku}) — ${p.quantity} in stock` }));
+const customerOptions = () => cache.customers.map((c) => ({ value: c.id, label: c.name }));
+const vendorOptions = () => cache.vendors.map((v) => ({ value: v.id, label: v.name }));
+
+/* ------------------------------------------------------- line-item builder */
+function lineItemsBlock() {
+  return `
+    <div class="field">
+      <label>Line items</label>
+      <div id="lines"></div>
+      <button class="btn ghost" type="button" id="add-line" style="margin-top:4px">Add another line</button>
+    </div>`;
+}
+
+function wireLineItems() {
+  const box = $("lines");
+  const addLine = () => {
+    const row = document.createElement("div");
+    row.className = "line-row";
+    row.innerHTML = `
+      <select class="line-product">${productOptions().map((o) => `<option value="${o.value}">${esc(o.label)}</option>`).join("")}</select>
+      <input class="line-qty" type="number" min="1" value="1">
+      <button class="btn quiet" type="button" title="Remove line">&times;</button>`;
+    row.querySelector("button").addEventListener("click", () => {
+      if (box.children.length > 1) row.remove();
+    });
+    box.appendChild(row);
+  };
+  addLine();
+  $("add-line").addEventListener("click", addLine);
+  return () => [...box.querySelectorAll(".line-row")].map((row) => ({
+    product_id: Number(row.querySelector(".line-product").value),
+    quantity: Number(row.querySelector(".line-qty").value),
+  })).filter((i) => i.product_id && i.quantity > 0);
+}
+
+/* ------------------------------------------------------------------ views */
+const VIEWS = {
+  overview: { label: "Overview", render: renderOverview },
+  products: { label: "Products", render: renderProducts },
+  inventory: { label: "Inventory", render: renderInventory },
+  orders: { label: "Orders", render: renderOrders },
+  sales: { label: "Sales", render: renderSales },
+  customers: { label: "Customers", render: renderCustomers },
+  vendors: { label: "Vendors", render: renderVendors },
+};
+
+function renderNav() {
+  $("nav").innerHTML = Object.entries(VIEWS).map(([key, v]) => `
+    <button data-view="${key}" ${key === view ? 'aria-current="page"' : ""}>
+      <span>${esc(v.label)}</span><span class="tally" id="tally-${key}"></span>
+    </button>`).join("");
+  $("nav").querySelectorAll("button").forEach((b) =>
+    b.addEventListener("click", () => go(b.dataset.view)));
+}
+
+async function go(next) {
+  view = next;
+  renderNav();
+  $("main").innerHTML = `<p class="hint">Loading…</p>`;
+  try {
+    await VIEWS[view].render();
+  } catch (err) {
+    $("main").innerHTML = `<div class="panel"><div class="empty"><strong>Couldn't load this view</strong>${esc(err.message)}</div></div>`;
+  }
+}
+
+async function refresh() {
+  await loadRefs();
+  await go(view);
+}
+
+function head(title, sub, actions = "") {
+  return `<div class="head"><div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div><div class="head-actions">${actions}</div></div>`;
+}
+
+/* ---------- overview ---------- */
+async function renderOverview() {
+  const d = await api("/api/reports/dashboard");
+  $("main").innerHTML = head("Overview", "Where the business stands right now") + `
+    <div class="tiles">
+      <div class="tile"><div class="k">Revenue today</div><div class="v">${money(d.revenue.today)}</div><div class="s">${int(d.revenue.sale_count)} sales all time</div></div>
+      <div class="tile"><div class="k">Revenue this month</div><div class="v">${money(d.revenue.this_month)}</div><div class="s">${money(d.revenue.all_time)} all time</div></div>
+      <div class="tile"><div class="k">Stock value at cost</div><div class="v">${money(d.stock.stock_value)}</div><div class="s">${int(d.stock.units_on_hand)} units on hand</div></div>
+      <div class="tile"><div class="k">Open orders</div><div class="v">${int(d.counts.open_orders)}</div><div class="s">not yet completed</div></div>
+      <div class="tile ${d.counts.low_stock_items > 0 ? "flag" : ""}"><div class="k">Needs restocking</div><div class="v">${int(d.counts.low_stock_items)}</div><div class="s">at or below reorder level</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>Running low</h3><button class="btn ghost" data-goto="inventory">Open inventory</button></div>
+      ${table(
+        [{ label: "SKU" }, { label: "Product" }, { label: "On hand", align: "right" }, { label: "Reorder at", align: "right" }],
+        d.low_stock,
+        (r) => `<tr><td class="num">${esc(r.sku)}</td><td class="wrap">${esc(r.name)}</td>
+          <td class="right num"><span class="tag low">${int(r.quantity)}</span></td>
+          <td class="right num">${int(r.reorder_level)}</td></tr>`,
+        "Everything is above its reorder level", "Nothing needs restocking today.")}
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>Recent orders</h3><button class="btn ghost" data-goto="orders">Open orders</button></div>
+      ${table(
+        [{ label: "Order" }, { label: "Customer" }, { label: "Status" }, { label: "Placed" }, { label: "Total", align: "right" }],
+        d.recent_orders,
+        (r) => `<tr><td class="num">#${r.id}</td><td class="wrap">${esc(r.customer_name || "Walk-in")}</td>
+          <td><span class="tag ${statusClass(r.status)}">${esc(r.status)}</span></td>
+          <td>${date(r.order_date)}</td><td class="right num">${money(r.total)}</td></tr>`,
+        "No orders yet", "Place one from the Orders tab, or ask the assistant.")}
+    </div>`;
+  document.querySelectorAll("[data-goto]").forEach((b) => b.addEventListener("click", () => go(b.dataset.goto)));
+  $("tally-inventory").textContent = d.counts.low_stock_items > 0 ? d.counts.low_stock_items : "";
+  $("tally-orders").textContent = d.counts.open_orders || "";
+}
+
+const statusClass = (s) => ({ completed: "ok", cancelled: "cancelled", pending: "pending" }[s] || "");
+
+/* ---------- products ---------- */
+async function renderProducts() {
+  const search = $("product-search")?.value || "";
+  const rows = await api("/api/products" + (search ? `?search=${encodeURIComponent(search)}` : ""));
+  $("main").innerHTML = head("Products", `${rows.length} product${rows.length === 1 ? "" : "s"} in the catalogue`,
+    `<input class="search" id="product-search" placeholder="Search name or SKU" value="${esc(search)}">
+     <button class="btn" id="new-product">Add product</button>`) + `
+    <div class="panel">${table(
+      [{ label: "SKU" }, { label: "Product" }, { label: "Category" }, { label: "Vendor" },
+       { label: "Price", align: "right" }, { label: "Cost", align: "right" },
+       { label: "Stock", align: "right" }, { label: "", align: "right" }],
+      rows,
+      (p) => `<tr>
+        <td class="num">${esc(p.sku)}</td>
+        <td class="wrap">${esc(p.name)}</td>
+        <td>${esc(p.category || "—")}</td>
+        <td>${esc(p.vendor_name || "—")}</td>
+        <td class="right num">${money(p.price)}</td>
+        <td class="right num">${money(p.cost)}</td>
+        <td class="right num">${Number(p.quantity) <= Number(p.reorder_level)
+          ? `<span class="tag low">${int(p.quantity)}</span>` : int(p.quantity)}</td>
+        <td class="right">
+          <button class="btn quiet" data-edit="${p.id}">Edit</button>
+          <button class="btn quiet danger" data-del="${p.id}">Delete</button>
+        </td></tr>`,
+      "No products match", "Try a different search, or add a product.")}</div>`;
+
+  const s = $("product-search");
+  if (window.__searchFocused) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
+  let t;
+  s.addEventListener("input", () => {
+    window.__searchFocused = true;
+    clearTimeout(t);
+    t = setTimeout(renderProducts, 250);
+  });
+  s.addEventListener("blur", () => { window.__searchFocused = false; });
+  $("new-product").addEventListener("click", productModal);
+  document.querySelectorAll("[data-edit]").forEach((b) =>
+    b.addEventListener("click", () => productModal(rows.find((p) => String(p.id) === b.dataset.edit))));
+  document.querySelectorAll("[data-del]").forEach((b) =>
+    b.addEventListener("click", () => confirmDelete(rows.find((p) => String(p.id) === b.dataset.del))));
+  $("tally-products").textContent = rows.length;
+}
+
+function productModal(existing) {
+  const editing = !!existing;
+  modal({
+    title: editing ? `Edit ${existing.name}` : "Add product",
+    subtitle: editing ? "Changing details here doesn't move stock." : "Opens an inventory record at the same time.",
+    submitLabel: editing ? "Save changes" : "Add product",
+    fields: `
+      ${editing ? "" : field("sku", "SKU", { required: true, placeholder: "WH-1000", value: "" })}
+      ${field("name", "Product name", { required: true, value: existing?.name })}
+      <div class="grid2">
+        ${field("price", "Sale price", { type: "number", step: "0.01", min: 0, required: true, value: existing?.price })}
+        ${field("cost", "Unit cost", { type: "number", step: "0.01", min: 0, value: existing?.cost ?? 0 })}
+      </div>
+      ${field("category", "Category", { value: existing?.category })}
+      ${select("vendor_id", "Vendor", vendorOptions(), { blank: "No vendor", value: existing?.vendor_id })}
+      <div class="grid2">
+        ${field("reorder_level", "Reorder level", { type: "number", min: 0, value: existing?.reorder_level ?? 10, note: "Flags as low at or below this" })}
+        ${editing ? "" : field("initial_quantity", "Opening stock", { type: "number", min: 0, value: 0 })}
+      </div>
+      ${field("description", "Description", { value: existing?.description })}`,
+    onSubmit: async (data, close) => {
+      const body = {
+        name: data.name, price: Number(data.price), cost: Number(data.cost || 0),
+        category: data.category || null, description: data.description || null,
+        vendor_id: data.vendor_id ? Number(data.vendor_id) : null,
+        reorder_level: Number(data.reorder_level || 10),
+      };
+      if (editing) {
+        await api(`/api/products/${existing.id}`, { method: "PUT", body });
+      } else {
+        await api("/api/products", { method: "POST", body: {
+          ...body, sku: data.sku, initial_quantity: Number(data.initial_quantity || 0) } });
+      }
+      close(); await refresh();
+    },
+  });
+}
+
+function confirmDelete(product) {
+  modal({
+    title: `Delete ${product.name}?`,
+    subtitle: "This removes the product and its inventory record. It can't be undone.",
+    submitLabel: "Delete product",
+    fields: `<p style="margin:0;color:var(--muted);font-size:13px">If the product appears on past orders, the database will refuse the delete to keep that history intact.</p>`,
+    onSubmit: async (_d, close) => {
+      await api(`/api/products/${product.id}`, { method: "DELETE" });
+      close(); await refresh();
+    },
+  });
+}
+
+/* ---------- inventory ---------- */
+async function renderInventory() {
+  const [rows, movements] = await Promise.all([
+    api("/api/inventory"), api("/api/inventory/movements?limit=25"),
+  ]);
+  $("main").innerHTML = head("Inventory", "Stock on hand, lowest first",
+    `<button class="btn" id="adjust">Adjust stock</button>`) + `
+    <div class="panel">${table(
+      [{ label: "SKU" }, { label: "Product" }, { label: "Warehouse" },
+       { label: "On hand", align: "right" }, { label: "Reorder at", align: "right" },
+       { label: "Updated" }, { label: "", align: "right" }],
+      rows,
+      (r) => `<tr>
+        <td class="num">${esc(r.sku)}</td><td class="wrap">${esc(r.name)}</td>
+        <td>${esc(r.warehouse || "main")}</td>
+        <td class="right num">${Number(r.quantity) <= Number(r.reorder_level)
+          ? `<span class="tag low">${int(r.quantity)}</span>` : int(r.quantity)}</td>
+        <td class="right num">${int(r.reorder_level)}</td>
+        <td>${date(r.updated_at)}</td>
+        <td class="right"><button class="btn quiet" data-adjust="${r.product_id}">Adjust</button></td>
+      </tr>`,
+      "No inventory records", "Add a product and stock will appear here.")}</div>
+    <div class="panel">
+      <div class="panel-head"><h3>Recent movements</h3></div>
+      ${table(
+        [{ label: "When" }, { label: "Product" }, { label: "Change", align: "right" }, { label: "Reason" }],
+        movements,
+        (m) => `<tr><td>${date(m.created_at)}</td><td class="wrap">${esc(m.product_name)}</td>
+          <td class="right num" style="color:${m.change_qty < 0 ? "var(--danger)" : "var(--good)"}">${m.change_qty > 0 ? "+" : ""}${int(m.change_qty)}</td>
+          <td class="wrap">${esc(m.reason || "—")}</td></tr>`,
+        "No movements recorded", "Stock changes will be logged here.")}
+    </div>`;
+  $("adjust").addEventListener("click", () => adjustModal());
+  document.querySelectorAll("[data-adjust]").forEach((b) =>
+    b.addEventListener("click", () => adjustModal(b.dataset.adjust)));
+}
+
+function adjustModal(productId) {
+  modal({
+    title: "Adjust stock",
+    subtitle: "Enter the change, not the new total. Negative numbers remove stock.",
+    submitLabel: "Apply adjustment",
+    fields: `
+      ${select("product_id", "Product", productOptions(), { value: productId })}
+      ${field("delta", "Change", { type: "number", required: true, value: "", placeholder: "50", note: "+50 receives 50 units, -3 writes off 3" })}
+      ${field("reason", "Reason", { placeholder: "Delivery from Northwind", note: "Shows in the movement log" })}`,
+    onSubmit: async (data, close) => {
+      await api("/api/inventory/adjust", { method: "POST", body: {
+        product_id: Number(data.product_id), delta: Number(data.delta), reason: data.reason || null } });
+      close(); await refresh();
+    },
+  });
+}
+
+/* ---------- orders ---------- */
+async function renderOrders() {
+  const filter = $("order-filter")?.value || "";
+  const rows = await api("/api/orders" + (filter ? `?status=${filter}` : ""));
+  const statuses = ["pending", "processing", "shipped", "completed", "cancelled"];
+  $("main").innerHTML = head("Orders", "Customer orders and their fulfilment status",
+    `<select class="search" id="order-filter">
+      <option value="">All statuses</option>
+      ${statuses.map((s) => `<option value="${s}" ${s === filter ? "selected" : ""}>${s}</option>`).join("")}
+     </select>
+     <button class="btn" id="new-order">New order</button>`) + `
+    <div class="panel">${table(
+      [{ label: "Order" }, { label: "Customer" }, { label: "Placed" }, { label: "Status" },
+       { label: "Total", align: "right" }, { label: "", align: "right" }],
+      rows,
+      (o) => `<tr>
+        <td class="num">#${o.id}</td><td class="wrap">${esc(o.customer_name || "Walk-in")}</td>
+        <td>${date(o.order_date)}</td>
+        <td><span class="tag ${statusClass(o.status)}">${esc(o.status)}</span></td>
+        <td class="right num">${money(o.total)}</td>
+        <td class="right">
+          <button class="btn quiet" data-view-order="${o.id}">View</button>
+          <button class="btn quiet" data-status="${o.id}">Status</button>
+          ${o.status !== "completed" && o.status !== "cancelled"
+            ? `<button class="btn quiet" data-pay="${o.id}">Take payment</button>` : ""}
+        </td></tr>`,
+      "No orders here", "Create one, or ask the assistant to place it.")}</div>`;
+
+  $("order-filter").addEventListener("change", renderOrders);
+  $("new-order").addEventListener("click", orderModal);
+  document.querySelectorAll("[data-view-order]").forEach((b) =>
+    b.addEventListener("click", () => viewOrder(b.dataset.viewOrder)));
+  document.querySelectorAll("[data-status]").forEach((b) =>
+    b.addEventListener("click", () => statusModal(rows.find((o) => String(o.id) === b.dataset.status))));
+  document.querySelectorAll("[data-pay]").forEach((b) =>
+    b.addEventListener("click", () => paymentModal(rows.find((o) => String(o.id) === b.dataset.pay))));
+  $("tally-orders").textContent = rows.filter((o) => !["completed", "cancelled"].includes(o.status)).length || "";
+}
+
+function orderModal() {
+  let getLines;
+  modal({
+    title: "New order",
+    subtitle: "Stock is reserved as soon as the order is placed.",
+    submitLabel: "Place order",
+    fields: select("customer_id", "Customer", customerOptions(), { blank: "Walk-in (no customer)" }) + lineItemsBlock(),
+    onSubmit: async (data, close) => {
+      const items = getLines();
+      if (!items.length) throw new Error("Add at least one line item.");
+      const res = await api("/api/orders", { method: "POST", body: {
+        customer_id: data.customer_id ? Number(data.customer_id) : null, items } });
+      close(); await refresh();
+      note(`Order #${res.id} placed, total ${money(res.total)}.`);
+    },
+  });
+  getLines = wireLineItems();
+}
+
+async function viewOrder(id) {
+  const o = await api(`/api/orders/${id}`);
+  modal({
+    title: `Order #${o.id}`,
+    subtitle: `${o.customer_name || "Walk-in"} · ${date(o.order_date)} · ${o.status}`,
+    submitLabel: "Close",
+    fields: `<div class="scroller"><table><thead><tr><th>SKU</th><th>Product</th>
+      <th class="right">Qty</th><th class="right">Unit</th><th class="right">Line</th></tr></thead><tbody>
+      ${o.items.map((i) => `<tr><td class="num">${esc(i.sku)}</td><td class="wrap">${esc(i.product_name)}</td>
+        <td class="right num">${int(i.quantity)}</td><td class="right num">${money(i.unit_price)}</td>
+        <td class="right num">${money(i.quantity * i.unit_price)}</td></tr>`).join("")}
+      </tbody><tfoot><tr><td colspan="4" class="right" style="padding-top:12px">Total</td>
+      <td class="right num" style="padding-top:12px">${money(o.total)}</td></tr></tfoot></table></div>`,
+    onSubmit: async (_d, close) => close(),
+  });
+}
+
+function statusModal(order) {
+  const statuses = ["pending", "processing", "shipped", "completed", "cancelled"];
+  modal({
+    title: `Order #${order.id} status`,
+    subtitle: "Cancelling does not return stock automatically — adjust inventory separately.",
+    submitLabel: "Update status",
+    fields: select("status", "Status", statuses.map((s) => ({ value: s, label: s })), { value: order.status }),
+    onSubmit: async (data, close) => {
+      await api(`/api/orders/${order.id}/status`, { method: "PATCH", body: { status: data.status } });
+      close(); await refresh();
+    },
+  });
+}
+
+function paymentModal(order) {
+  const methods = ["cash", "card", "bank_transfer", "credit"];
+  modal({
+    title: `Take payment for order #${order.id}`,
+    subtitle: "Records a sale and marks the order completed.",
+    submitLabel: "Record payment",
+    fields: `
+      ${field("amount", "Amount", { type: "number", step: "0.01", min: 0, value: Number(order.total).toFixed(2) })}
+      ${select("payment_method", "Method", methods.map((m) => ({ value: m, label: m.replace("_", " ") })), { value: "cash" })}
+      ${field("note", "Note", { placeholder: "Paid in full" })}`,
+    onSubmit: async (data, close) => {
+      await api("/api/sales", { method: "POST", body: {
+        order_id: order.id, amount: Number(data.amount),
+        payment_method: data.payment_method, note: data.note || null } });
+      close(); await refresh();
+      note(`Payment recorded for order #${order.id}.`);
+    },
+  });
+}
+
+/* ---------- sales ---------- */
+async function renderSales() {
+  const [rows, top] = await Promise.all([
+    api("/api/sales"), api("/api/reports/top-products?limit=8"),
+  ]);
+  const total = rows.reduce((s, r) => s + Number(r.amount), 0);
+  $("main").innerHTML = head("Sales", `${rows.length} recorded, ${money(total)} taken`,
+    `<button class="btn ghost" id="download-report">Download report</button>
+     <button class="btn" id="quick-sale">Record a sale</button>`) + `
+    <div class="panel">${table(
+      [{ label: "Sale" }, { label: "Order" }, { label: "Customer" }, { label: "When" },
+       { label: "Method" }, { label: "Amount", align: "right" }, { label: "", align: "right" }],
+      rows,
+      (s) => `<tr>
+        <td class="num">#${s.id}</td><td class="num">${s.order_id ? "#" + s.order_id : "—"}</td>
+        <td class="wrap">${esc(s.customer_name || "Walk-in")}</td><td>${date(s.sale_date)}</td>
+        <td>${esc(String(s.payment_method).replace("_", " "))}</td>
+        <td class="right num">${money(s.amount)}</td>
+        <td class="right"><button class="btn quiet danger" data-void="${s.id}">Void</button></td>
+      </tr>`,
+      "No sales recorded yet", "Use \u201cRecord a sale\u201d for an over-the-counter sale.")}</div>
+    <div class="panel">
+      <div class="panel-head"><h3>Best sellers</h3></div>
+      ${table(
+        [{ label: "SKU" }, { label: "Product" }, { label: "Units sold", align: "right" }, { label: "Revenue", align: "right" }],
+        top,
+        (t) => `<tr><td class="num">${esc(t.sku)}</td><td class="wrap">${esc(t.name)}</td>
+          <td class="right num">${int(t.units_sold)}</td><td class="right num">${money(t.revenue)}</td></tr>`,
+        "Nothing sold yet", "Best sellers appear once orders exist.")}
+    </div>`;
+  $("quick-sale").addEventListener("click", quickSaleModal);
+  $("download-report").addEventListener("click", reportModal);
+  document.querySelectorAll("[data-void]").forEach((b) =>
+    b.addEventListener("click", () => voidModal(b.dataset.void)));
+  $("tally-sales").textContent = rows.length || "";
+}
+
+function reportModal() {
+  const periods = ["day", "week", "month", "year"];
+  modal({
+    title: "Download sales report",
+    subtitle: "A PDF covering the whole day/week/month/year that contains the date below.",
+    submitLabel: "Generate PDF",
+    fields: select("period", "Period", periods.map((p) => ({ value: p, label: p })), { value: "week" })
+      + field("date", "Any date in that period", { type: "date", value: new Date().toISOString().slice(0, 10) }),
+    onSubmit: async (data, close) => {
+      const res = await api("/api/reports/sales-report", { method: "POST", body: {
+        period: data.period, date: data.date } });
+      close();
+      window.open(res.url, "_blank");
+    },
+  });
+}
+
+function quickSaleModal() {
+  let getLines;
+  const methods = ["cash", "card", "bank_transfer", "credit"];
+  modal({
+    title: "Record a sale",
+    subtitle: "Creates the order, takes the stock and records payment in one go.",
+    submitLabel: "Record sale",
+    fields: select("customer_id", "Customer", customerOptions(), { blank: "Walk-in (no customer)" })
+      + lineItemsBlock()
+      + select("payment_method", "Payment method", methods.map((m) => ({ value: m, label: m.replace("_", " ") })), { value: "cash" })
+      + field("note", "Note", { placeholder: "Counter sale" }),
+    onSubmit: async (data, close) => {
+      const items = getLines();
+      if (!items.length) throw new Error("Add at least one line item.");
+      const res = await api("/api/sales/quick", { method: "POST", body: {
+        customer_id: data.customer_id ? Number(data.customer_id) : null,
+        items, payment_method: data.payment_method, note: data.note || null } });
+      close(); await refresh();
+      note(`Sale #${res.sale_id} recorded, ${money(res.amount)} taken.`);
+    },
+  });
+  getLines = wireLineItems();
+}
+
+function voidModal(id) {
+  modal({
+    title: `Void sale #${id}?`,
+    subtitle: "The order goes back to pending. Stock is not returned.",
+    submitLabel: "Void sale",
+    fields: `<p style="margin:0;color:var(--muted);font-size:13px">If the goods came back, follow up with a positive inventory adjustment so the movement log explains the change.</p>`,
+    onSubmit: async (_d, close) => {
+      await api(`/api/sales/${id}`, { method: "DELETE" });
+      close(); await refresh();
+    },
+  });
+}
+
+/* ---------- customers ---------- */
+async function renderCustomers() {
+  const rows = await api("/api/customers");
+  $("main").innerHTML = head("Customers", `${rows.length} on file`,
+    `<button class="btn" id="new-customer">Add customer</button>`) + `
+    <div class="panel">${table(
+      [{ label: "Name" }, { label: "Email" }, { label: "Phone" }, { label: "Address" },
+       { label: "Orders", align: "right" }, { label: "Lifetime value", align: "right" }, { label: "", align: "right" }],
+      rows,
+      (c) => `<tr><td class="wrap">${esc(c.name)}</td><td>${esc(c.email || "—")}</td>
+        <td class="num">${esc(c.phone || "—")}</td><td class="wrap">${esc(c.address || "—")}</td>
+        <td class="right num">${int(c.order_count)}</td><td class="right num">${money(c.lifetime_value)}</td>
+        <td class="right">
+          <button class="btn quiet" data-edit-c="${c.id}">Edit</button>
+          <button class="btn quiet danger" data-del-c="${c.id}">Delete</button>
+        </td></tr>`,
+      "No customers yet", "Add one, or place a walk-in order without a customer.")}</div>`;
+  $("new-customer").addEventListener("click", () => partyModal("customer"));
+  document.querySelectorAll("[data-edit-c]").forEach((b) =>
+    b.addEventListener("click", () => partyModal("customer", rows.find((c) => String(c.id) === b.dataset.editC))));
+  document.querySelectorAll("[data-del-c]").forEach((b) =>
+    b.addEventListener("click", () => confirmDeleteParty("customer", rows.find((c) => String(c.id) === b.dataset.delC))));
+  $("tally-customers").textContent = rows.length || "";
+}
+
+/* ---------- vendors ---------- */
+async function renderVendors() {
+  const rows = await api("/api/vendors");
+  $("main").innerHTML = head("Vendors", `${rows.length} supplier${rows.length === 1 ? "" : "s"}`,
+    `<button class="btn" id="new-vendor">Add vendor</button>`) + `
+    <div class="panel">${table(
+      [{ label: "Name" }, { label: "Email" }, { label: "Phone" }, { label: "Address" }, { label: "", align: "right" }],
+      rows,
+      (v) => `<tr><td class="wrap">${esc(v.name)}</td><td>${esc(v.email || "—")}</td>
+        <td class="num">${esc(v.phone || "—")}</td><td class="wrap">${esc(v.address || "—")}</td>
+        <td class="right">
+          <button class="btn quiet" data-edit-v="${v.id}">Edit</button>
+          <button class="btn quiet danger" data-del-v="${v.id}">Delete</button>
+        </td></tr>`,
+      "No vendors yet", "Add a supplier to link products to.")}</div>`;
+  $("new-vendor").addEventListener("click", () => partyModal("vendor"));
+  document.querySelectorAll("[data-edit-v]").forEach((b) =>
+    b.addEventListener("click", () => partyModal("vendor", rows.find((v) => String(v.id) === b.dataset.editV))));
+  document.querySelectorAll("[data-del-v]").forEach((b) =>
+    b.addEventListener("click", () => confirmDeleteParty("vendor", rows.find((v) => String(v.id) === b.dataset.delV))));
+  $("tally-vendors").textContent = rows.length || "";
+}
+
+function partyModal(kind, existing) {
+  const path = kind === "vendor" ? "/api/vendors" : "/api/customers";
+  modal({
+    title: existing ? `Edit ${existing.name}` : `Add ${kind}`,
+    submitLabel: existing ? "Save changes" : `Add ${kind}`,
+    fields: field("name", "Name", { required: true, value: existing?.name })
+      + field("email", "Email", { type: "email", value: existing?.email })
+      + field("phone", "Phone", { value: existing?.phone })
+      + field("address", "Address", { value: existing?.address }),
+    onSubmit: async (data, close) => {
+      const body = { name: data.name, email: data.email || null, phone: data.phone || null, address: data.address || null };
+      if (existing) await api(`${path}/${existing.id}`, { method: "PUT", body });
+      else await api(path, { method: "POST", body });
+      close(); await refresh();
+    },
+  });
+}
+
+function confirmDeleteParty(kind, existing) {
+  const path = kind === "vendor" ? "/api/vendors" : "/api/customers";
+  const note = kind === "vendor"
+    ? "Products from this vendor stay, but lose their vendor link."
+    : "Orders and sales for this customer stay, but lose their customer link.";
+  modal({
+    title: `Delete ${existing.name}?`,
+    subtitle: "This can't be undone.",
+    submitLabel: `Delete ${kind}`,
+    fields: `<p style="margin:0;color:var(--muted);font-size:13px">${note}</p>`,
+    onSubmit: async (_d, close) => {
+      await api(`${path}/${existing.id}`, { method: "DELETE" });
+      close(); await refresh();
+    },
+  });
+}
+
+/* ------------------------------------------------------------------- chat */
+// Minimal markdown -> HTML: bold, [label](url) links, and bare URLs.
+// Everything is escaped first, so this can't inject arbitrary HTML — it only
+// ever wraps already-escaped text in <strong>/<a> tags.
+function renderInline(text) {
+  const tokens = [];
+  const stash = (html) => { tokens.push(html); return `\u0000${tokens.length - 1}\u0000`; };
+
+  let working = esc(text);
+  working = working.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, label, url) =>
+    stash(`<a href="${url}" target="_blank" rel="noopener noreferrer" class="chat-link">${label}</a>`));
+  working = working.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  working = working.replace(/(https?:\/\/[^\s<]+)/g, (url) =>
+    stash(`<a href="${url}" target="_blank" rel="noopener noreferrer" class="chat-link">${url}</a>`));
+  return working.replace(/\u0000(\d+)\u0000/g, (_, i) => tokens[Number(i)]);
+}
+
+function bubble(cls, text, trace, attachments) {
+  const el = document.createElement("div");
+  el.className = `msg ${cls}`;
+  if (cls === "bot") el.innerHTML = renderInline(text);
+  else el.textContent = text;
+
+  if (trace && trace.length) {
+    const box = document.createElement("div");
+    box.className = "trace";
+    trace.forEach((t) => {
+      const chip = document.createElement("span");
+      chip.className = t.ok ? "" : "bad";
+      chip.textContent = t.tool;
+      box.appendChild(chip);
+    });
+    el.appendChild(box);
+  }
+  if (attachments && attachments.length) {
+    const box = document.createElement("div");
+    box.className = "attachments";
+    attachments.forEach((a) => {
+      const link = document.createElement("a");
+      link.href = a.url;
+      link.download = a.filename || "report.pdf";
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.className = "attachment-chip";
+      link.textContent = `\u2b07 ${a.filename || "Download"}`;
+      box.appendChild(link);
+    });
+    el.appendChild(box);
+  }
+  $("log").appendChild(el);
+  $("log").scrollTop = $("log").scrollHeight;
+  return el;
+}
+
+function note(text) { bubble("bot", text); }
+
+function greet() {
+  $("log").innerHTML = "";
+  const el = document.createElement("div");
+  el.className = "hint";
+  el.innerHTML = `Ask in plain language. It reads and writes the same database this console does, so anything it changes shows up when you refresh a tab.
+    <ul>
+      <li>What's running low?</li>
+      <li>Restock 50 USB-C cables, delivery from Northwind</li>
+      <li>Sell 2 monitors to TechPoint Retail, paid by card</li>
+      <li>How much did we take this month?</li>
+      <li>Generate a weekly sales report</li>
+    </ul>`;
+  $("log").appendChild(el);
+}
+
+async function send(text) {
+  bubble("user", text);
+  const pending = document.createElement("div");
+  pending.className = "thinking";
+  pending.innerHTML = "<i></i><i></i><i></i><span style='margin-left:4px'>Working</span>";
+  $("log").appendChild(pending);
+  $("log").scrollTop = $("log").scrollHeight;
+  $("chat-send").disabled = true;
+
+  try {
+    const res = await fetch(`${BOT}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text, session_id: sessionId }),
+    });
+    const data = await res.json();
+    pending.remove();
+    if (!res.ok) {
+      bubble("err", data.error || `The assistant returned ${res.status}.`);
+    } else {
+      sessionId = data.session_id;
+      bubble("bot", data.reply, data.tool_calls, data.attachments);
+      if ((data.tool_calls || []).length) await refresh();
+    }
+  } catch (err) {
+    pending.remove();
+    bubble("err", `Couldn't reach the assistant at ${BOT}. Is the chatbot service running?`);
+  } finally {
+    $("chat-send").disabled = false;
+    $("chat-input").focus();
+  }
+}
+
+/* ------------------------------------------------------------------ status */
+async function checkHealth() {
+  try {
+    const h = await api("/health");
+    $("api-dot").className = "dot " + (h.database === "connected" ? "up" : "down");
+    $("api-status").textContent = h.database === "connected" ? "API and database up" : `Database: ${h.database}`;
+  } catch {
+    $("api-dot").className = "dot down";
+    $("api-status").textContent = "API unreachable";
+  }
+  try {
+    const res = await fetch(`${BOT}/health`);
+    const h = await res.json();
+    $("bot-dot").className = "dot " + (h.mcp_connected ? "up" : "down");
+    $("bot-status").textContent = h.mcp_connected ? `${h.tools.length} tools over MCP` : "Assistant has no tools";
+    $("chat-sub").textContent = h.mcp_connected ? `${h.tools.length} ERP tools · ${h.model}` : "Tool server not connected";
+  } catch {
+    $("bot-dot").className = "dot down";
+    $("bot-status").textContent = "Assistant offline";
+    $("chat-sub").textContent = "Chatbot service is not running";
+  }
+}
+
+/* ------------------------------------------------------------------- boot */
+$("chat-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const text = $("chat-input").value.trim();
+  if (!text) return;
+  $("chat-input").value = "";
+  $("chat-input").style.height = "auto";
+  send(text);
+});
+$("chat-input").addEventListener("input", (e) => {
+  e.target.style.height = "auto";
+  e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px";
+});
+$("chat-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("chat-form").requestSubmit(); }
+});
+$("chat-reset").addEventListener("click", async () => {
+  if (sessionId) { try { await fetch(`${BOT}/reset`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: sessionId }) }); } catch {} }
+  sessionId = null; greet();
+});
+$("chat-close").addEventListener("click", () => $("shell").classList.add("chat-hidden"));
+
+(async function boot() {
+  $("shell").classList.remove("chat-hidden");
+  renderNav();
+  greet();
+  checkHealth();
+  setInterval(checkHealth, 20000);
+  try {
+    await loadRefs();
+    await go("overview");
+  } catch (err) {
+    $("main").innerHTML = `<div class="panel"><div class="empty"><strong>Can't reach the API</strong>${esc(err.message)}</div></div>`;
+  }
+})();
+</script>
+</body>
+</html>

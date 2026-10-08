@@ -1,0 +1,61 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: erp-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: erp_db
+      MYSQL_USER: erp_user
+      MYSQL_PASSWORD: erp_password
+    ports:
+      # host 3307 so it won't clash with a MySQL you already run locally
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # runs automatically the FIRST time the volume is created
+      - ./backend/migrations/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uerp_user", "-perp_password"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build: ./backend
+    container_name: erp-backend
+    restart: unless-stopped
+    environment:
+      PORT: 4000
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: erp_user
+      DB_PASSWORD: erp_password
+      DB_NAME: erp_db
+    ports:
+      - "4000:4000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  chatbot:
+    build:
+      context: .
+      dockerfile: chatbot/Dockerfile
+    container_name: erp-chatbot
+    restart: unless-stopped
+    environment:
+      PORT: 5001
+      BACKEND_URL: http://backend:4000
+      MCP_SERVER_PATH: /app/mcp-server/server.py
+      OLLAMA_HOST: ${OLLAMA_HOST:-https://ollama.com}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-gpt-oss:120b}
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
+      OLLAMA_THINK: ${OLLAMA_THINK:-medium}
+    ports:
+      - "5001:5001"
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
